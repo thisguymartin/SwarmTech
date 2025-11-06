@@ -1,12 +1,9 @@
-const async = require('async')
-const _ = require('lodash')
-const {setModel, getModelSet} = require('./db')
-
+// Modern Chat Box Component
 Vue.component('chat-box', {
   template: '#chat-box-template',
+  props: ['name'],
   data() {
     return {
-      chat: getModelSet('Chat'),
       history: [],
       message: '',
       debug: false,
@@ -14,72 +11,74 @@ Vue.component('chat-box', {
   },
   computed: {
     debugOutput() {
-      return JSON.stringify(_.omit(this.$data, 'chat'), null, '  ');
+      return JSON.stringify(this.history, null, 2);
     },
   },
-  props: ["name"],
-  created() {
+  async created() {
+    // Load existing messages
+    await this.loadMessages();
 
-    // watch for changes, update chat
-    this.chat.on((spec, val, source) => {
-      //console.log('chat changed with op:', spec.op())
-      if (_.includes(['set', 'init', 'change'], spec.op())) {
-        process.nextTick(() => {
-          const chats = window.chats = this.chat.list(c => c._id)
+    // Listen for new messages via WebSocket
+    api.on('message', (data) => {
+      console.log('New message received:', data);
+      this.loadMessages();
+    });
 
-          // wait until all the chat messages have synced
-          async.parallel(chats.map(c => c.ready.bind(c)), () => {
-            const history = chats.map(m => m.pojo())
-            //console.log('chat changed:', history)
-            this.history = history
-          })
-        })
-      }
-    })
+    // Connect to WebSocket
+    api.connect();
 
     Vue.nextTick(() => {
-      this.$refs.chatInput.focus();
+      if (this.$refs.chatInput) {
+        this.$refs.chatInput.focus();
+      }
       this.scrollToBottom();
-    })
+    });
   },
   watch: {
-    chat() {this.scrollToBottom()}
+    history() {
+      Vue.nextTick(() => this.scrollToBottom());
+    }
   },
-
   methods: {
-    setMessage(e) {
-      message = e.target.value;
+    async loadMessages() {
+      try {
+        const messages = await api.getMessages();
+        this.history = messages.map(msg => ({
+          name: msg.username,
+          message: msg.message,
+          timestamp: msg.created_at
+        }));
+      } catch (error) {
+        console.error('Error loading messages:', error);
+      }
     },
-    sendChat(message) {
-      setModel('Message', null, message)
-    },
-    sendMessage() {
+    async sendMessage() {
       if (this.message === ':debug') {
-        this.debug = this.debug !== true;
+        this.debug = !this.debug;
         this.message = '';
-        return
+        return;
       }
 
       if (this.message === ':reset' || this.message === ':clear') {
-        // TODO: find a way to reset the chat
-        console.error('Clear chat is not implemented!')
+        this.history = [];
         this.message = '';
-        return
+        return;
       }
 
-      if (this.message !== '') {
-        this.sendChat({
-          name: this.name,
-          message: this.message
-        });
-
-        this.message = '';
-        Vue.nextTick(this.scrollToBottom)
+      if (this.message.trim() !== '') {
+        try {
+          await api.sendMessage(this.name, this.message);
+          this.message = '';
+          Vue.nextTick(() => this.scrollToBottom());
+        } catch (error) {
+          console.error('Error sending message:', error);
+        }
       }
     },
     scrollToBottom() {
-      var pane = this.$refs.history;
-      pane.scrollTop = pane.scrollHeight;
+      if (this.$refs.history) {
+        this.$refs.history.scrollTop = this.$refs.history.scrollHeight;
+      }
     },
   },
 });

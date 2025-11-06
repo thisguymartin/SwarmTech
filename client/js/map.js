@@ -1,168 +1,123 @@
-import _ from 'lodash'
-import L from 'leaflet'
-
-window._ = _
-
-// yay for lack of dynamic imports
-// life is so much fun
-import '../images/accesdenied.png'
-import '../images/avalanche1.png'
-import '../images/blast.png'
-import '../images/cowabduction.png'
-import '../images/earthquake-3.png'
-import '../images/fire.png'
-import '../images/linedown.png'
-import '../images/pirates.png'
-import '../images/planecrash.png'
-import '../images/radiation.png'
-import '../images/rescue-blue.png'
-import '../images/rescue-green.png'
-import '../images/shooting.png'
-import '../images/star-green.png'
-import '../images/theft.png'
-import '../images/tornado-2.png'
-import '../images/treedown.png'
-import '../images/tsunami.png'
-import '../images/zombie-outbreak1.png'
-
-const {setModel, getModel, listModel, getModelSet} = require('./db')
-const rndcolor = require('color-generator')
-
-function rndBounded(min, max) {
-  return Math.random() * (max - min) + min;
-}
-
-function createFontIcon(faClass, color) {
-  return L.divIcon({
-    className: '',  // empty class (ignore default styles)
-    html: '<i class="fa '+faClass+'" aria-hidden="true" style="color: '+color+'; font-size: 2em; text-shadow: 1px 1px 3px black"></i>',
-  })
-}
-
-function createImgIcon(url) {
-  return L.icon({
-    iconUrl: require('../images/'+url),
-    iconSize: [32, 37],
-  })
-}
-
-const eventTooltip = (e) => e.resolved ? e.tooltip + ' resolved by ' + e.resolvedBy : e.tooltip
-
+// Modern Map Component
 Vue.component('st-map', {
   template: '#map-template',
+  props: ['name'],
   data() {
     return {
+      map: null,
       pins: {},
-      events: {},
+      ourPinMarker: null,
+      ourPin: null,
+      userColors: new Map(),
     }
   },
-  props: ['name'],
-  mounted() {
+  async mounted() {
+    await this.initMap();
+  },
+  methods: {
+    async initMap() {
+      // Generate random color for this user
+      const colors = ['#e74c3c', '#3498db', '#2ecc71', '#f39c12', '#9b59b6', '#1abc9c', '#e67e22', '#34495e'];
+      const userColor = colors[Math.floor(Math.random() * colors.length)];
 
-    // pick a random color and starting point in Phoenix AZ for this client
-    const spawn = {
-      name: this.name,
-      lat: rndBounded(33.46, 33.7),
-      lng: rndBounded(-111.88, -112.25),
-      color: rndcolor(0.99, 0.99).hexString(),
-    }
+      // Random starting point in Phoenix AZ
+      const startLat = 33.46 + Math.random() * (33.7 - 33.46);
+      const startLng = -112.25 + Math.random() * (-111.88 + 112.25);
 
-    // create a map to represent current state of the world
-    const map = window.map = L.map( 'map', {
-      center: [spawn.lat, spawn.lng],
-      minZoom: 4,
-      zoom: 11
-    })
+      // Create map
+      this.map = L.map('map', {
+        center: [startLat, startLng],
+        minZoom: 4,
+        zoom: 11
+      });
 
-    L.tileLayer( 'http://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
-      subdomains: ['a', 'b', 'c'],
-    }).addTo(map)
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+        subdomains: ['a', 'b', 'c'],
+      }).addTo(this.map);
 
-    // create a pin to represent current client
-    const ourPin = setModel('Pin', this.name, spawn)
+      // Create our pin
+      this.ourPin = {
+        username: this.name,
+        name: this.name,
+        latitude: startLat,
+        longitude: startLng,
+        color: userColor
+      };
 
-    // helper method to add pins to the map
-    const addPin = (pinData) => {
-      const icon = createFontIcon('fa-map-marker', pinData.color)
+      const ourIcon = this.createFontIcon('fa-map-marker', userColor);
+      this.ourPinMarker = L.marker([startLat, startLng], { icon: ourIcon })
+        .bindTooltip(this.name + ' (You)')
+        .addTo(this.map);
 
-      // add the pin to the map
-      const marker = L.marker([pinData.lat, pinData.lng], {icon})
-        .bindTooltip(pinData.name)
-        .addTo(map)
-      this.pins[pinData._id] = marker
+      // Update pin position when map moves (throttled)
+      let updateTimeout = null;
+      this.map.on('move', () => {
+        if (updateTimeout) clearTimeout(updateTimeout);
+        updateTimeout = setTimeout(() => {
+          const center = this.map.getCenter();
+          this.updateOurPin(center.lat, center.lng);
+        }, 200);
+      });
 
-      // watch for changes, update map
-      pinData.on((spec, val, source) => {
-        if (_.includes(['set', 'init'], spec.op())) {
-          const id = spec.id()
-          const pin_position = [source.lat, source.lng]
-          this.pins[id].setLatLng(pin_position)
-        }
-      })
-    }
+      // Load existing pins
+      await this.loadPins();
 
-    const addEvent = (eventData) => {
-      const icon = createImgIcon(eventData.icon)
+      // Listen for pin updates via WebSocket
+      api.on('pin', () => {
+        this.loadPins();
+      });
 
+      // Send our initial position
+      await this.updateOurPin(startLat, startLng);
+    },
 
-      // add the event to the map
-      const marker = L.marker([eventData.lat, eventData.lng], {icon})
-        .bindTooltip(eventTooltip(eventData))
-        .addTo(map)
-      this.events[eventData._id] = marker
+    createFontIcon(faClass, color) {
+      return L.divIcon({
+        className: '',
+        html: `<i class="fa ${faClass}" aria-hidden="true" style="color: ${color}; font-size: 2em; text-shadow: 1px 1px 3px black"></i>`,
+      });
+    },
 
-      // whenever an event is resolved, update the map
-      eventData.on((spec, val, source) => {
-        if (_.includes(['set', 'init'], spec.op()) && source.resolved) {
-          const id = source._id
-          const icon = createImgIcon(source.icon)
-          this.events[id]
-            .setIcon(icon)
-            .bindTooltip(eventTooltip(source))
-        }
-      })
-    }
+    async updateOurPin(lat, lng) {
+      this.ourPin.latitude = lat;
+      this.ourPin.longitude = lng;
 
-    // for each Event record stored by the server, add an event on the map
-    listModel('Event', (err, events) =>
-      events
-      .map(e => getModel('Event', e))
-      .map(e => e.ready(() => addEvent(e)))
-    )
-
-    // for each Pin record stored by the server, add a pin on the map
-    listModel('Pin', (err, pins) =>
-      pins
-      .map(p => getModel('Pin', p))
-      .map(p => p.ready(() => addPin(p)))
-    )
-
-    // whenever our user pans the map, move our pin so other users can see
-    let update_pin = (evt) => ourPin.set(map.getCenter())
-    update_pin = _.throttle(update_pin, 200, {leading: true, trailing: true})
-    map.on('move', update_pin)
-
-    // if our pin is within 400 meters of an event, mark the event as resolved
-    const RESOLVE_DISTANCE = 400
-    let resolve_events = (spec, val, source) => {
-      if (_.includes(['set', 'init'], spec.op())) {
-        const id = spec.id()
-        const pin_position = L.latLng(source.lat, source.lng)
-
-        getModelSet('Event').ready((err, events) => {
-          // resolve events less than 500 meters away
-          const resolved = _(events._objects)
-            .filter(e => !e.resolved)
-            .filter(e => map.distance(pin_position, L.latLng(e.lat, e.lng)) < RESOLVE_DISTANCE)
-            .map(e => {e.set({resolved: true, icon: 'star-green.png', resolvedBy: this.name}); return e})
-            .value()
-          if (resolved.length > 0) console.log('resolved events:', resolved)
-        })
+      try {
+        await api.updatePin(this.name, this.name, lat, lng);
+        this.ourPinMarker.setLatLng([lat, lng]);
+      } catch (error) {
+        console.error('Error updating pin:', error);
       }
-    }
-    resolve_events = _.debounce(resolve_events, 200, {leading: true, trailing: true})
-    ourPin.on(resolve_events)
+    },
 
-  }
+    async loadPins() {
+      try {
+        const pins = await api.getPins();
+
+        // Update or add pins
+        pins.forEach(pin => {
+          // Skip our own pin (already handled)
+          if (pin.name === this.name) return;
+
+          const pinId = pin.id;
+          const color = pin.color || '#3388ff';
+
+          if (this.pins[pinId]) {
+            // Update existing pin
+            this.pins[pinId].setLatLng([pin.latitude, pin.longitude]);
+          } else {
+            // Add new pin
+            const icon = this.createFontIcon('fa-map-marker', color);
+            const marker = L.marker([pin.latitude, pin.longitude], { icon })
+              .bindTooltip(pin.name)
+              .addTo(this.map);
+            this.pins[pinId] = marker;
+          }
+        });
+      } catch (error) {
+        console.error('Error loading pins:', error);
+      }
+    },
+  },
 });

@@ -38,41 +38,69 @@ If you don't understand what these things mean, don't worry, you probably don't 
 
 To begin contributing, please fork the repository to your personal account, clone it, and submit a pull request.  We'll respond with comments and should have your patch merged in short order.  If there are any problems with this process, please talk to us on [gitter.im/JSVillage](https://gitter.im/JSVillage).
 
-# Running the project for developers/testers
+# Quick Start with Docker (Recommended)
 
-Basically all we need to do is serve a static site.  If you alreaady know how to do that, feel free to serve the root directory of this project.  Otherwise, keep reading to set up a simple Node.js server.
+The easiest way to run SwarmTech is using Docker Compose:
 
-Open a terminal on Mac or Linux and enter the following commands.  On Windows?  Get [git](https://git-scm.com/downloads) first, then run `git-bash` and do the same.
+## Prerequisites
 
-```
-# install nvm
-curl -o- https://raw.githubusercontent.com/creationix/nvm/v0.33.8/install.sh | bash
+- [Docker](https://docs.docker.com/get-docker/) (version 20.10+)
+- [Docker Compose](https://docs.docker.com/compose/install/) (version 2.0+)
 
-# check for latest version of node
-nvm ls-remote
+## Running SwarmTech
 
-# install, for instance node.js v8.9.4
-nvm install v8.9.4
+```bash
+# Clone the repository
+git clone https://github.com/JSVillage/SwarmTech.git
+cd SwarmTech
 
-# install parcel build tool
-npm install -g parcel-bundler
+# Start all services (database, API, web)
+docker-compose up -d
 
-```
-
-Now we can serve the site:
-
-```
-// runs on port 1234
-cd [where-ever-you-cloned-this-repo]
-parcel client/index.html
-
-// in a new terminal
-// runs on port 8001
-node server/index.js
+# Wait 30-60 seconds for initialization, then open your browser
 ```
 
-Then just open your browser at [http://127.0.0.1:1234](http://127.0.0.1:1234).
+Open your browser at **http://localhost:3000**
 
-# Making Changes
+That's it! Enter your name and start coordinating with your team.
 
-The code for the browser is in `client`, the code for node.js is in `server`, and some common code used by both (such as CRDT models) is in `common`.  Parcel will automatically detect changes to `client` and recompile them to the `dist` folder and reload any changes in your browser.  Any changes to the server will require a restart to take effect.  These should be minimal though - the server's only job is to keep track of your CRDT models.
+## Features
+
+- **Real-time Map**: See all team members' locations on an interactive map
+- **Live Chat**: Communicate with your team in real-time
+- **WebSocket Sync**: Instant updates across all connected clients
+- **No Setup Required**: Everything runs in Docker containers
+- **Responsive Design**: Works on desktop and mobile
+
+## Testing with Multiple Users
+
+1. Open multiple browser tabs at `http://localhost:3000`
+2. Use different names in each tab
+3. Watch location pins and messages sync in real-time
+
+## Stopping the Application
+
+```bash
+# Stop all services
+docker-compose down
+
+# Stop and remove all data (fresh start next time)
+docker-compose down -v
+```
+
+## Documentation
+
+- **[Complete Setup Guide](SETUP.md)** - Detailed installation and configuration
+- **[Architecture Overview](ARCHITECTURE.md)** - System design and data flow
+- **[API Documentation](SETUP.md#api-documentation)** - REST and WebSocket APIs
+
+## Technology Stack
+
+- **Frontend**: Vue.js, Leaflet.js (OpenStreetMap), WebSocket
+- **Backend**: Node.js, Express, WebSocket Server
+- **Database**: PostgreSQL
+- **Infrastructure**: Docker, Docker Compose, Nginx
+
+## Legacy Version
+
+The original CRDT-based version is still available on the `legacy` branch. The current version uses a REST API with WebSocket for simpler deployment and maintenance.

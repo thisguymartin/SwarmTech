@@ -1,57 +1,49 @@
-import map from "./map"
-import chatApi from "./chatApi"
-import chatBox from "./chatBox"
-import login from "./login"
+// Modern Main App
 
 Vue.component('st-dashboard', {
   template: '#dashboard-template',
   props: ['name'],
-  data: function() {
+  data() {
     return {
-      showTemplate: true,
-      windowHeight:0,
-      windowWidth:0,
+      windowHeight: 0,
+      windowWidth: 0,
       toggleView: true
     }
   },
-  methods:{
-    getWindowWidth(event) {
-      this.windowWidth = document.documentElement.clientWidth
+  methods: {
+    getWindowWidth() {
+      this.windowWidth = document.documentElement.clientWidth;
     },
-    getWindowHeight(event){
-      this.windowHeight = document.documentElement.clientHeight
+    getWindowHeight() {
+      this.windowHeight = document.documentElement.clientHeight;
     },
-    toggleButton(){
-      if(this.toggleView == true){
-        this.toggleView = false
-      } else {
-        this.toggleView = true
-      }
+    toggleButton() {
+      this.toggleView = !this.toggleView;
     }
   },
   mounted() {
-    this.$nextTick(function() {
-      // window event listener
-      window.addEventListener('resize', this.getWindowWidth)
-      window.addEventListener('resize', this.getWindowHeight)
-      this.getWindowHeight()
-      this.getWindowWidth()
-    })
+    this.$nextTick(() => {
+      window.addEventListener('resize', this.getWindowWidth);
+      window.addEventListener('resize', this.getWindowHeight);
+      this.getWindowHeight();
+      this.getWindowWidth();
+    });
   }
-})
+});
 
 Vue.component('st-main', {
   template: '#main-template',
-  data: function() {
+  data() {
     return {
       name: '',
     }
   },
   methods: {
-    setName: function(name) {
+    setName(name) {
       this.name = name;
     }
   }
 });
 
-new Vue({el: '#main'});
+// Initialize Vue app
+new Vue({ el: '#main' });
